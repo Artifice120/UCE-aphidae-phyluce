@@ -1,0 +1,14 @@
+#!/bin/bash
+# Dependencies to build environments and containers used in the pipeline
+
+# Need apptainer and micromamba already installed
+
+  apptainer pull docker://markderbyshire/stampy:latest
+
+  apptainer pull docker://fairclothlab/phyluce:1.7.3
+
+  micromamba create -n sammy -c conda-forge -c bioconda samtools
+
+  micromamba create -n arts -c bioconda -c conda-forge art
+
+  micromamba create -n bedtools -c bioconda -c conda-forge bedtools
