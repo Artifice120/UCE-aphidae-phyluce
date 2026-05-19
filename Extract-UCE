@@ -21,17 +21,17 @@ ulimit -a
 ulimit -n 16384
 
 ulimit -a
-
+echo "completed ulimits"
                                         ### Build Fasta Array ###
 
 threads=40                                                      #### <<< ADD CPU's HERE
 
 name="aphididae"                                               ### <<< Arbitrary name ( No spaces, special characters, or capitals ) used in temporrary as well as the final bait list file
+echo $name
+genomedir=0 ### <<< Don't change this ( it does nothing )
 
-genome-dir=0 ### <<< Don't change this
-
-container='/proj/parkerlab/users/envs/apptainer/singularity_containers/phyluce_1.7.3.sif'  ### <<< Absolute path to phyluce singularity image
-
+container="/proj/parkerlab/users/envs/apptainer/singularity_containers/phyluce_1.7.3.sif"  ### <<< Absolute path to phyluce singularity image
+echo $container
 base="/proj/parkerlab/users/all-ref-aphids"    ### <<<< ADD SAME OUTPUT DIRECTORY HERE AS BELOW ( must be the same as the one used in the list of fasta files )
 
 lister=$( ls -lhst *fasta | awk '{ print $NF }' ) ## <<< list of fasta files to be used in the base directory ( must end in .fasta and not contain additional "." )
@@ -40,14 +40,18 @@ pre="GCA_051175985.2.fasta" ### <<< using the first genome in the list as the ex
 
 cd ${base}
 
-genomes=$( cat $lister )   #### ^^^^^ same list file as above ^^^^
+echo "DEBUG: finished initial vars"
+
+#genomes=$( cat $lister )   #### ^^^^^ same list file as above ^^^^
+
+echo "${genomes}"
 
 sheep=(
-$genomes
+${lister}
 )
 
 for beep in "${sheep[@]}" ; do
-        ls -lhst $beep
+        echo $beep
 done
 
 mkdir reads
@@ -68,10 +72,7 @@ cp $pre base/
 
 # Sanitize sequence headers
 
-sed 's/#/ /g'  base/${pre} | \
-awk '{ print $1 }' | \
-awk 'BEGIN{cc=0 ;}{ if ( $1 ~ /^>/ ) { print $1""cc ; cc=1+cc ; } else { print $0 } }' | \
-sed 's/-//g' > base/${pre%.*}.fasta.tmp
+sed 's/#/ /g'  base/${pre} | awk '{ print $1 }' | awk 'BEGIN{cc=0 ;}{ if ( $1 ~ /^>/ ) { print $1""cc ; cc=1+cc ; } else { print $0 } }' | sed 's/-//g' > base/${pre%.*}.fasta.tmp
 
 mv base/${pre%.*}.fasta.tmp base/${pre%.*}.fasta
 
@@ -187,6 +188,8 @@ for beep in "${sheep[@]}" ; do
         #### Arbitrary Directory structure forced/imposed by phyluce devoloper ###
         echo "organizing alignment files"
 
+        source /users/j/o/jotorr/enviro/mamba/micro/etc/profile.d/micromamba.sh
+
         micromamba activate jellyscope
 
         mkdir aligns/${beep%.*}
@@ -234,6 +237,8 @@ for beep in "${sheep[@]}" ; do
         # checkpoint
         touch ${beep%.*}.done
 
+        micromamba deactivate
+
 done
 
 echo " Genome list completed: combine UCE's into bait sequences next "
@@ -246,6 +251,7 @@ for blip in "${sheep[@]}" ; do
 
 done
 
+source /users/j/o/jotorr/enviro/mamba/micro/etc/profile.d/micromamba.sh
 
 #### Post loop
 
