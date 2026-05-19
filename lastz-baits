@@ -1,19 +1,12 @@
 #!/bin/bash
 #SBATCH -J peluche
 #SBATCH --account ACF-UTK0011
-#SBATCH --mem=1000gb
+#SBATCH --mem=400gb
 #SBATCH --nodes=1
-#SBATCH --ntasks=48
+#SBATCH --ntasks=50
 #SBATCH --time=24:00:00
-#SBATCH --partition=campus-bigmem
 #SBATCH --error=error/phyluce.e%j
 #SBATCH --output=log/phyluce.o%j
-#SBATCH --qos=campus-bigmem
-#SBATCH --exclusive
-
-#source /lustre/isaac24/scratch/jtorre28/enviro/mamba/micro/etc/profile.d/micromamba.sh
-
-#micromamba activate peluche
 
 ulimit -a
 
