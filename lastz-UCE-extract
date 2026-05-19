@@ -1,0 +1,25 @@
+#!/bin/bash
+#SBATCH -J peluche
+#SBATCH --account ACF-UTK0011
+#SBATCH --mem=100gb
+#SBATCH --nodes=1
+#SBATCH --ntasks=48
+#SBATCH --time=03:00:00
+#SBATCH --partition=short
+#SBATCH --error=error/phyluce.e%j
+#SBATCH --output=log/phyluce.o%j
+#SBATCH --qos=short
+#SBATCH --exclusive
+
+cd /lustre/isaac24/scratch/jtorre28/singularity_containers
+
+singularity run \
+-B /lustre/isaac24/scratch/jtorre28/bipaa-probe2/lastz-output \
+-B /lustre/isaac24/scratch/jtorre28/bipaa-probe2 \
+phyluce_1.7.3.sif \
+phyluce_probe_slice_sequence_from_genomes \
+    --lastz /lustre/isaac24/scratch/jtorre28/bipaa-probe2/lastz-output \
+    --conf /lustre/isaac24/scratch/jtorre28/bipaa-probe2/genomic.conf \
+    --flank 1600 \
+    --name-pattern "hymenoptera-v2-PRINCIPAL-bait-set.fasta.txt_v_{}.lastz.clean" \
+    --output /lustre/isaac24/scratch/jtorre28/bipaa-probe2/extracts
