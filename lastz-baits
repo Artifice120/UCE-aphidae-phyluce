@@ -1,0 +1,36 @@
+#!/bin/bash
+#SBATCH -J peluche
+#SBATCH --account ACF-UTK0011
+#SBATCH --mem=1000gb
+#SBATCH --nodes=1
+#SBATCH --ntasks=48
+#SBATCH --time=24:00:00
+#SBATCH --partition=campus-bigmem
+#SBATCH --error=error/phyluce.e%j
+#SBATCH --output=log/phyluce.o%j
+#SBATCH --qos=campus-bigmem
+#SBATCH --exclusive
+
+#source /lustre/isaac24/scratch/jtorre28/enviro/mamba/micro/etc/profile.d/micromamba.sh
+
+#micromamba activate peluche
+
+ulimit -a
+
+ulimit -n 16384
+
+ulimit -a
+
+cd /lustre/isaac24/scratch/jtorre28/bipaa-probe2
+
+singularity run \
+        -B /lustre/isaac24/scratch/jtorre28/peluche/hymenoptera-v2-PRINCIPAL-bait-set.fasta.txt \
+        -B /lustre/isaac24/scratch/jtorre28/singularity_containers \
+        -B /lustre/isaac24/scratch/jtorre28/bipaa-probe2 \
+        /lustre/isaac24/scratch/jtorre28/singularity_containers/phyluce_1.7.3.sif \
+        phyluce_probe_run_multiple_lastzs_sqlite \
+        --db draft-aphid-db.sqlite --output lastz-output \
+        --probefile /lustre/isaac24/scratch/jtorre28/peluche/hymenoptera-v2-PRINCIPAL-bait-set.fasta.txt \
+        --genome-base-path /lustre/isaac24/scratch/jtorre28/bipaa-probe2/ \
+        --coverage 50 --identity 80 --cores 40 \
+        --scaffoldlist Acyrthosiphon_pisum_JIC1_v1_0_scaffolds Aphis_fabae_JIC1_v2_scaffolds Aphis_glycines_4_v2_1_scaffolds Aphis_rumicis_v1_scaffolds Aphis_thalictri_v1_scaffolds Ap_OP_genome Brachycaudus_helichrysi_v1_1_scaffolds Brachycaudus_klugkisti_v1_1_scaffolds_reformat Dv_genome_V4_0 Eriosoma_lanigerum_v1_0_scaffolds GCA_009835225_1_LBME_Acra_1_0_genomic GCA_017140985_1_hormaphis_cornu_26Sep2017_PoQx8_genomic GCA_019022885_1_Schi1_0_genomic GCA_021307375_1_tetraneura_10X_genome_133_genomic GCA_022818045_1_ASM2281804v1_genomic GCA_027563435_1_ASM2756343v1_genomic GCA_027580255_1_ASM2758025v1_genomic GCA_902439185_1_CINCED3_genomic GCA_948098885_1_ihDrePlat2_1_genomic GCA_949089665_1_Meuphorbiae_v1_genomic GCA_949715065_1_ihPerAcec1_1_genomic GCA_956483605_1_ihTubSali1_1_genomic GCF_003676215_2_ASM367621v3_genomic GCF_004010815_1_ASM401081v1_genomic GCF_005508785_1_pea_aphid_22Mar2018_4r6ur_genomic GCF_020882245_1_ASM2088224v1_genomic LSR1_CP_genome Myzus_cerasi_genome_v1_1 Myzus_persicae_O_v2_0_scaffolds Myzus_varians_v1_1_scaffolds_reformat Pentalonia_nigronervosa_v1_scaffolds SBAphid_ref_genome_v6 Sitobion_avenae_JIC1_v2_1_scaffolds wheat_aphid_alt
