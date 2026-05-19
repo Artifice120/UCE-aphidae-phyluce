@@ -1,0 +1,23 @@
+#!/bin/bash/
+
+source /users/j/o/jotorr/enviro/mamba/micro/etc/profile.d/micromamba.sh
+
+micromamba activate datasets
+
+datasets download genome taxon "Aphididae" --reference
+
+unzip ncbi_dataset.zip
+
+mv ncbi_dataset/*/*/*.f*a ./
+
+rm -rf ncbi_dataset/ README.md md5sum.txt
+
+full=$( ls -lhst *.f*a | awk '{ print $10 }' )
+
+catt=( ${full} )
+
+for meow in "${catt[@]}" ; do
+        pre=$( awk -F '_' '{ print $1"_"$2".fasta" }' <<< ${meow} )
+        mv ${meow} ${pre}
+
+done
