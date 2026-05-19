@@ -3,10 +3,10 @@ Commands used to find UCE seqeunces in aphid assemblies to build phylogeny
 
 ### Obtaining the NCBI aphid refrence genomes
 
-Simply used ncbi's cli tool datasets to access the api in a human readable way
+Used ncbi's cli tool datasets to access the api in a human readable way and renamed the files to only have the srr number
 
 ```
-datasets download genome taxon "Aphididae" --reference
+bash get-refs
 ```
 
 ### Create Baits
