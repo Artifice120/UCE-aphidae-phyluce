@@ -7,8 +7,8 @@ Bash script Extract-UCE was run to build the initial Bait-seqeunces to be used o
 sbatch Extract-UCE
 ```
 
-The resulting baits from this script were then used to extract the UCE of each aphid
+The resulting baits from this script were then used to searh the UCE of each genome with lastz
 
 ```
-sbatch UCE-seqs
+sbatch lastz-baits
 ```
