@@ -1,0 +1,448 @@
+#!/bin/bash
+#SBATCH -J Peluche
+#SBATCH --mem=600gb
+#SBATCH --nodes=1
+#SBATCH --ntasks=48
+#SBATCH --time=24:00:00
+#SBATCH --error=error/phyluce.e%j
+#SBATCH --output=log/phyluce.o%j
+
+cd /proj/parkerlab/users/all-ref-aphids/
+
+### NOTE: The exmplar genome should ideally be one that is in the "center" of the phylogeny cluster,
+###        But since this is denovo to begin with the first genome in the list is arbitrarily assigned as the exemplar genome
+###        Alternatively, the exemplar genome can also be the refrence with the highest BUSCO
+###        This can be done by replacing variable "pre" with the file name of the selected exemplar genome (Assuming the file is in the same directory as the rest)
+
+                                        ### Increase Open File Limit ###
+
+ulimit -a
+
+ulimit -n 16384
+
+ulimit -a
+
+                                        ### Build Fasta Array ###
+
+threads=40                                                      #### <<< ADD CPU's HERE
+
+name="aphididae"                                               ### <<< Arbitrary name ( No spaces, special characters, or capitals ) used in temporrary as well as the final bait list file
+
+genome-dir=0 ### <<< Don't change this
+
+container='/proj/parkerlab/users/envs/apptainer/singularity_containers/phyluce_1.7.3.sif'  ### <<< Absolute path to phyluce singularity image
+
+base="/proj/parkerlab/users/all-ref-aphids"    ### <<<< ADD SAME OUTPUT DIRECTORY HERE AS BELOW ( must be the same as the one used in the list of fasta files )
+
+lister=$( ls -lhst *fasta | awk '{ print $NF }' ) ## <<< list of fasta files to be used in the base directory ( must end in .fasta and not contain additional "." )
+
+pre="GCA_051175985.2.fasta" ### <<< using the first genome in the list as the exemplar genome ( can be changed to any other genome in the list by replacing "pre" with the file name of the desired exemplar genome )
+
+cd ${base}
+
+genomes=$( cat $lister )   #### ^^^^^ same list file as above ^^^^
+
+sheep=(
+$genomes
+)
+
+for beep in "${sheep[@]}" ; do
+        ls -lhst $beep
+done
+
+mkdir reads
+
+mkdir base
+
+mkdir aligns
+
+mkdir aligns/all
+
+mkdir bed
+
+mkdir genomes
+
+echo "[beds]" > bed-files.conf
+
+cp $pre base/
+
+# Sanitize sequence headers
+
+sed 's/#/ /g'  base/${pre} | \
+awk '{ print $1 }' | \
+awk 'BEGIN{cc=0 ;}{ if ( $1 ~ /^>/ ) { print $1""cc ; cc=1+cc ; } else { print $0 } }' | \
+sed 's/-//g' > base/${pre%.*}.fasta.tmp
+
+mv base/${pre%.*}.fasta.tmp base/${pre%.*}.fasta
+
+refrence="${pre%.*}.fasta"
+
+counts=$( wc -l <<< $genomes | awk '{ print $1 }' )
+
+echo "DEBUG: Counted $counts genomes "
+
+for beep in "${sheep[@]}" ; do
+
+        echo "Starting $beep ..."
+
+        ### Check for checkpointing
+
+        echo "checking for checkpointing"
+
+        if [ -f ${beep%.*}.done ] ; then
+                continue
+        fi
+
+        ### Clean Assembly Headers to One Field
+
+        echo " Sanatizing Headers  "
+
+        sed 's/#/ /g'  $beep | awk '{ print $1 }' | awk 'BEGIN{cc=0 ;}{ if ( $1 ~ /^>/ ) { print $1""cc ; cc=1+cc ; } else { print $0 } }' |  sed 's/-//g' > ${beep%.*}.fasta.tmp
+
+        mv ${beep%.*}.fasta.tmp ${beep%.*}.fasta
+
+        # rm ${beep}
+
+        ### Create Prefix Directory Structure
+
+        echo "making directories with prefix genomes/${beep%.*}"
+
+        mkdir genomes/${beep%.*}
+
+        cp ${beep%.*}.fasta genomes/${beep%.*}
+
+        #### Convert to 2-bit
+        echo " Fasta to 2-bit conversion "
+
+        singularity exec /users/j/o/jotorr/singularity_containers/ucsc-fatotwobit_482--hdc0a859_0.sif \
+                faToTwoBit \
+                genomes/${beep%.*}/${beep%.*}.fasta \
+                genomes/${beep%.*}/${beep%.*}.2bit
+
+        #### Write Simulated Illumina Reads
+
+        echo " Making simulated illumina paired reads "
+
+        source /lustre/isaac24/scratch/jtorre28/enviro/mamba/micro/etc/profile.d/micromamba.sh
+
+        micromamba activate arts
+
+        art_illumina \
+        --paired \
+        --in   genomes/${beep%.*}/${beep%.*}.fasta\
+        --out reads/${beep%.*}-reads \
+        --len 100 \
+        --fcov 2 \
+        --mflen 200 \
+        --sdev 150 \
+        -ir 0.0 -ir2 0.0 \
+        -dr 0.0 -dr2 0.0 \
+        -qs 100 -qs2 100 \
+        -na
+
+
+       #### Concatenate simulated reads ( irreversable step ) ####
+
+        echo "concatenating simulated reads"
+
+        cat reads/${beep%.*}-reads1.fq > reads/${beep%.*}-pe100-reads.fq
+
+        cat reads/${beep%.*}-reads2.fq >> reads/${beep%.*}-pe100-reads.fq
+
+        rm reads/${beep%.*}-reads1.fq
+
+        rm reads/${beep%.*}-reads2.fq
+
+        gzip  reads/${beep%.*}-pe100-reads.fq
+
+        #### Format stampy database ( AKA the selescted genome in directory base/ )
+
+        micromamba activate stampy
+
+        cd base
+
+        stampy.py --species="${name}"  --assembly="${refrence%.*}" -G ${refrence%.*} ${refrence}
+
+        stampy.py -g ${refrence%.*} -H ${refrence%.*}
+
+        cd ${base}
+
+        #### Align Simulated Reads to base database ####
+
+        echo "aligning simulated reads to the base fasta in directory base/ "
+
+        mkdir aligns/${beep%.*}
+
+        cd aligns/${beep%.*}
+
+        stampy.py \
+        --maxbasequal 93 \
+        -g ${base}/base/${refrence%.*} \
+        -h ${base}/base/${refrence%.*} \
+        --substitutionrate=0.05 -t ${threads} --insertsize=400 -M \
+        ${base}/reads/${beep%.*}-pe100-reads.fq.gz | samtools view -Sb - > ${beep%.*}-to-${refrence%.*}.bam
+
+        cd ${base}
+
+        #### Arbitrary Directory structure forced/imposed by phyluce devoloper ###
+        echo "organizing alignment files"
+
+        micromamba activate jellyscope
+
+        mkdir aligns/${beep%.*}
+
+        samtools view -h -F 4 -b aligns/${beep%.*}/${beep%.*}-to-${refrence%.*}.bam > aligns/${beep%.*}/${beep%.*}-to-${refrence%.*}-MAPPING.bam
+
+        rm aligns/${beep%.*}/${beep%.*}-to-${refrence%.*}.bam
+
+        ln -s ${base}/aligns/${beep%.*}/${beep%.*}-to-${refrence%.*}-MAPPING.bam ${base}/aligns/all/${beep%.*}-to-${refrence%.*}-MAPPING.bam
+
+
+        ### Convert alignments to BED format and sort and merge overlapping intervals
+
+        echo "bam to bed to sort to merge to condense"
+
+        micromamba activate bedtools
+
+        bedtools bamtobed -i ${base}/aligns/all/${beep%.*}-to-${refrence%.*}-MAPPING.bam -bed12 > bed/${beep%.*}-to-${refrence%.*}-MAPPING.bed
+
+        bedtools sort -i bed/${beep%.*}-to-${refrence%.*}-MAPPING.bed > bed/${beep%.*}-to-${refrence%.*}-MAPPING.sort.bed
+
+        bedtools merge -i bed/${beep%.*}-to-${refrence%.*}-MAPPING.sort.bed > bed/${beep%.*}-to-${refrence%.*}-MAPPING.merge.bed
+
+        ### Pyluce wrapper
+
+        echo "removing repetitive conserved loci"
+
+        singularity run -B ${base} $container phyluce_probe_strip_masked_loci_from_set \
+                --bed bed/${beep%.*}-to-${refrence%.*}-MAPPING.merge.bed \
+                --twobit genomes/${pre%.*}/${pre%.*}.2bit \
+                --output bed/${beep%.*}-to-${refrence%.*}-MAPPING.strip.bed \
+                --filter-mask 0.75 \
+                --min-length 50
+
+        ### checkpointing
+
+        echo "finished ${beep} : adding checkpoint"
+
+        #touch ${beep%.*}.done
+
+        ### Create bed configuration file
+
+#       echo "${beep%.*}:${base}/bed/${beep%.*}-to-${refrence%.*}-MAPPING.strip.bed" >> bed-files.conf
+
+        # checkpoint
+        touch ${beep%.*}.done
+
+done
+
+echo " Genome list completed: combine UCE's into bait sequences next "
+
+### config file looper
+
+for blip in "${sheep[@]}" ; do
+
+        echo "${blip%.*}:${base}/bed/${blip%.*}-to-${refrence%.*}-MAPPING.strip.bed" >> bed-files.conf
+
+done
+
+
+#### Post loop
+
+cd ${base}
+
+if [ -f ${name}-to-${refrence%.*}.sqlite ] ; then
+
+        echo "${name}-to-${refrence%.*}.sqlite already exists"
+else
+
+singularity run -B ${base} $container \
+        phyluce_probe_get_multi_merge_table \
+        --conf bed-files.conf \
+        --base-taxon ${refrence%.*} \
+        --output ${name}-to-${refrence%.*}.sqlite
+fi
+
+#### Secondary set
+
+singularity run -B ${base} $container \
+        phyluce_probe_query_multi_merge_table \
+        --db ${name}-to-${refrence%.*}.sqlite \
+        --base-taxon ${refrence%.*}
+
+if [ -f ${refrence%.*}+${counts}.bed ] ; then
+
+        echo "${refrence%.*}+${counts}.bed already exists"
+else
+
+singularity run -B ${base} $container \
+        phyluce_probe_query_multi_merge_table \
+        --db ${name}-to-${refrence%.*}.sqlite \
+        --base-taxon ${refrence%.*} \
+        --output ${refrence%.*}+${counts}.bed \
+        --specific-counts ${counts}
+
+fi
+
+if [ -f ${refrence%.*}+${counts}.fasta ] ; then
+
+        echo "${refrence%.*}+${counts}.fasta already exists"
+else
+
+singularity run -B ${base} $container \
+        phyluce_probe_get_genome_sequences_from_bed \
+        --bed ${refrence%.*}+${counts}.bed  \
+        --twobit genomes/${pre%.*}/${pre%.*}.2bit \
+        --buffer-to 160 \
+        --output ${refrence%.*}+${counts}.fasta
+
+fi
+
+if [ -f ${refrence%.*}+${counts}.temp.probes ] ; then
+
+        echo "${refrence%.*}+${counts}.temp.probes already exists"
+else
+
+singularity run -B ${base} $container \
+        phyluce_probe_get_tiled_probes \
+        --input  ${refrence%.*}+${counts}.fasta \
+        --probe-prefix "uce-" \
+        --design ${name}-v0 \
+        --designer jt \
+        --tiling-density 3 \
+        --two-probes \
+        --overlap middle \
+        --masking 0.25 \
+        --remove-gc \
+        --output ${refrence%.*}+${counts}.temp.probes
+
+fi
+
+if [ -f ${refrence%.*}+${counts}.temp.probes-TO-SELF-PROBES.lastz ] ; then
+
+        echo "${refrence%.*}+${counts}.temp.probes-TO-SELF-PROBES.lastz already exists"
+else
+
+singularity run -B ${base} $container \
+        phyluce_probe_easy_lastz \
+        --target ${refrence%.*}+${counts}.temp.probes \
+        --query ${refrence%.*}+${counts}.temp.probes \
+        --identity 50 \
+        --coverage 50 \
+        --output ${refrence%.*}+${counts}.temp.probes-TO-SELF-PROBES.lastz
+
+fi
+
+if [ -f ${refrence%.*}+${counts}.temp-DUPE-SCREENED.probes ] ; then
+
+        echo "${refrence%.*}+${counts}.temp-DUPE-SCREENED.probes already exists"
+else
+
+singularity run -B ${base} $container \
+        phyluce_probe_remove_duplicate_hits_from_probes_using_lastz \
+        --fasta ${refrence%.*}+${counts}.temp.probes \
+        --lastz ${refrence%.*}+${counts}.temp.probes-TO-SELF-PROBES.lastz \
+        --probe-prefix=uce-
+fi
+
+mkdir probe-design
+
+cd probe-design
+
+mkdir ${name}-genomes-lastz
+
+if [ -f  ${name}-genomes-lastz.done ] ; then
+
+        echo "${name}-genomes-lastz.done already exists"
+else
+
+        echo "$genomes "
+        scaff=$( sed 's/$/\\/g' <<< $genomes | sed 's/ //g' | tr -d '\n' | sed 's/\\/ /g' | sed 's/.fasta//g' )
+        echo "$scaff "
+
+singularity run -B ${base} $container \
+        phyluce_probe_run_multiple_lastzs_sqlite \
+        --probefile ../${refrence%.*}+${counts}.temp-DUPE-SCREENED.probes \
+        --scaffoldlist  $scaff  \
+        --genome-base-path ../genomes \
+        --identity 50 \
+        --cores 16 \
+        --db ${refrence%.*}+${counts}+all.sqlite \
+        --output ${name}-genomes-lastz
+
+fi
+
+cd ${base}
+
+### Make config file for extracting probes from non-exemplar genomes
+
+find ~+ -name "*.2bit" > odds.tmp
+
+awk -F '/' '{ print $NF }' odds.tmp | sed 's/.2bit//g' > ends.tmp
+
+echo '[scaffolds]' > odds-and-ends.tmp
+
+paste ends.tmp odds.tmp | awk '{print $1":"$2}' >> odds-and-ends.tmp
+
+rm  ends.tmp odds.tmp
+
+### output config odd and ends
+
+singularity run -B ${base} $container \
+        phyluce_probe_slice_sequence_from_genomes \
+        --conf odds-and-ends.tmp \
+        --lastz probe-design/${name}-genomes-lastz \
+        --probes 300 \
+        --name-pattern "${refrence%.*}+${counts}.temp-DUPE-SCREENED.probes_v_{}.lastz.clean" \
+        --output ${name}-genome-slices
+
+singularity run -B ${base} $container \
+        phyluce_probe_get_multi_fasta_table \
+        --fasta ${name}-genome-slices \
+        --output all-uce-all-${name}.sqlite \
+        --base-taxon ${refrence%.*}
+
+singularity run -B ${base} $container \
+        phyluce_probe_query_multi_fasta_table \
+        --db all-uce-all-${name}.sqlite \
+        --base-taxon ${refrence%.*}
+
+singularity run -B ${base} $container \
+        phyluce_probe_query_multi_fasta_table \
+        --db all-uce-all-${name}.sqlite \
+        --base-taxon ${refrence%.*} \
+        --output ${refrence%.*}+${counts}-back-to-${counts}.conf \
+        --specific-counts $(( counts - 1 ))
+
+singularity run -B ${base} $container \
+        phyluce_probe_get_tiled_probe_from_multiple_inputs \
+        --fastas ${name}-genome-slices \
+        --multi-fasta-output ${refrence%.*}+${counts}-back-to-${counts}.conf \
+        --probe-prefix "uce-" \
+        --designer jt \
+        --design ${name}-v0 \
+        --tiling-density 3 \
+        --overlap middle \
+        --masking 0.95 \
+        --remove-gc \
+        --two-probes \
+        --output ${name}-v0-final-probe-list.fasta
+
+### Remove duplicate probes from the final probe list
+
+singularity run -B ${base} $container \
+        phyluce_probe_easy_lastz \
+        --target ${name}-v0-final-probe-list.fasta \
+        --query ${name}-v0-final-probe-list.fasta \
+        --identity 50 \
+        --coverage 50 \
+        --output  ${name}-v0-final-probe-list-TO-SELF.lastz
+
+singularity run -B ${base} $container \
+        phyluce_probe_remove_duplicate_hits_from_probes_using_lastz \
+        --fasta ${name}-v0-final-probe-list.fasta \
+        --lastz ${name}-v0-final-probe-list-TO-SELF.lastz \
+        --probe-prefix=uce-
+
+echo "Final bait list saved as ${name}-v0-final-probe-list-DUPE-SCREENED.fasta "
+echo -e "Full path to bait list : \n ${base}/${name}-v0-final-probe-list-DUPE-SCREENED.fasta "
