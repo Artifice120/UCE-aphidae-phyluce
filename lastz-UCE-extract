@@ -1,25 +1,23 @@
 #!/bin/bash
-#SBATCH -J peluche
-#SBATCH --account ACF-UTK0011
+#SBATCH -J Peluche
 #SBATCH --mem=100gb
 #SBATCH --nodes=1
-#SBATCH --ntasks=48
+#SBATCH --ntasks=50
 #SBATCH --time=03:00:00
-#SBATCH --partition=short
-#SBATCH --error=error/phyluce.e%j
-#SBATCH --output=log/phyluce.o%j
-#SBATCH --qos=short
-#SBATCH --exclusive
+#SBATCH --error=error/peluche-ex.e%j
+#SBATCH --output=log/peluche-ex.o%j
 
-cd /lustre/isaac24/scratch/jtorre28/singularity_containers
+cd /proj/parkerlab/users/all-ref-aphids
+
+base="/proj/parkerlab/users/all-ref-aphids"
 
 singularity run \
--B /lustre/isaac24/scratch/jtorre28/bipaa-probe2/lastz-output \
--B /lustre/isaac24/scratch/jtorre28/bipaa-probe2 \
+-B /proj/parkerlab/users/all-ref-aphids/lastz-output \
+-B /proj/parkerlab/users/all-ref-aphids \
 phyluce_1.7.3.sif \
 phyluce_probe_slice_sequence_from_genomes \
-    --lastz /lustre/isaac24/scratch/jtorre28/bipaa-probe2/lastz-output \
-    --conf /lustre/isaac24/scratch/jtorre28/bipaa-probe2/genomic.conf \
-    --flank 1600 \
-    --name-pattern "hymenoptera-v2-PRINCIPAL-bait-set.fasta.txt_v_{}.lastz.clean" \
-    --output /lustre/isaac24/scratch/jtorre28/bipaa-probe2/extracts
+    --lastz ${base}/lastz-output \
+    --conf ${base}/genomic.conf \
+    --flank 1000 \
+    --name-pattern "aphididae-v2-PRINCIPAL-bait-set.fasta.txt_v_{}.lastz.clean" \
+    --output ${base}/extracts
